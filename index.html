@@ -2,11 +2,10 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Жизнь-игра">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
     <title>⚡ Жизнь-игра</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -21,6 +20,7 @@
             padding: 15px;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
         }
         .container {
             background: #16213e;
@@ -54,8 +54,9 @@
             margin-bottom: 8px;
             min-height: 16px;
             cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 3px;
         }
-        .sync-status:hover { color: #a0a0b0; }
         .token-input-area {
             display: none;
             margin: 10px 0;
@@ -92,9 +93,7 @@
             background: #0f3460;
             border-radius: 14px;
             padding: 15px 10px;
-            transition: transform 0.1s;
         }
-        .stat-card:active { transform: scale(0.95); }
         .stat-name { font-size: 13px; color: #a0a0b0; margin-bottom: 4px; }
         .stat-points { font-size: 34px; font-weight: bold; }
         .stat-points.back { color: #f38ba8; }
@@ -115,9 +114,8 @@
             font-weight: bold;
             cursor: pointer;
             color: #1a1a2e;
-            transition: all 0.1s;
+            -webkit-appearance: none;
         }
-        .qbtn:active { transform: scale(0.92); filter: brightness(1.2); }
         .qbtn.back { background: #f38ba8; }
         .qbtn.abs { background: #a6e3a1; }
         .qbtn.meds { background: #74c7ec; }
@@ -136,8 +134,9 @@
             font-size: 15px;
             background: #0f3460;
             color: #e0e0e0;
+            -webkit-appearance: none;
         }
-        select { min-width: 110px; }
+        select { min-width: 110px; text-align: center; }
         input { width: 70px; text-align: center; }
         .btn-add {
             background: #00b894;
@@ -148,8 +147,8 @@
             font-weight: bold;
             font-size: 15px;
             cursor: pointer;
+            -webkit-appearance: none;
         }
-        .btn-add:active { background: #00a381; }
         .total {
             margin: 10px 0;
             font-size: 18px;
@@ -161,9 +160,7 @@
             position: relative;
             display: inline-block;
             cursor: pointer;
-            transition: transform 0.2s;
         }
-        .pet-area:active { transform: scale(1.2); }
         .pet-bubble {
             position: absolute;
             top: -25px;
@@ -176,10 +173,8 @@
             font-size: 13px;
             white-space: nowrap;
             opacity: 0;
-            transition: opacity 0.3s;
             pointer-events: none;
         }
-        .pet-area:hover .pet-bubble { opacity: 1; }
         .pet-name {
             font-size: 14px;
             color: #a0a0b0;
@@ -201,8 +196,8 @@
             font-size: 14px;
             cursor: pointer;
             font-weight: bold;
+            -webkit-appearance: none;
         }
-        .btn:active { filter: brightness(1.3); }
         .btn.reset { background: #6c7086; }
         hr { border: 0; border-top: 1px solid #2a2a4a; margin: 15px 0; }
         .hint { color: #5a5a7a; font-size: 11px; margin-top: 8px; }
@@ -270,27 +265,14 @@
 </div>
 
 <script>
-    // ========== SERVICE WORKER (для офлайн-режима и иконки на iOS) ==========
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register("data:application/javascript," + encodeURIComponent(
-            "self.addEventListener('fetch', function(e) { e.respondWith(fetch(e.request).catch(function() { return caches.match(e.request); })); });" +
-            "self.addEventListener('install', function(e) { self.skipWaiting(); });"
-        )).catch(function(err) {
-            console.log('SW register error (normal on iOS if no HTTPS scope):', err);
-        });
-    }
-
-    // ========== ДАННЫЕ ==========
-    const STORAGE_KEY = 'lifeGameDataV5';
+    const STORAGE_KEY = 'lifeGameDataV6';
     const TOKEN_STORAGE_KEY = 'lifeGameGistToken';
     const GIST_FILENAME = 'life-game-data.json';
     const GIST_DESCRIPTION = 'Life Game sync data';
 
-    let data = getDefaultData();
+    let data;
     let GIST_ID = null;
     let syncEnabled = false;
-
-    // ========== ЗВУК ==========
     let audioCtx = null;
 
     function getAudioCtx() {
@@ -303,9 +285,7 @@
     function playClick() {
         try {
             const ctx = getAudioCtx();
-            if (ctx.state === 'suspended') {
-                ctx.resume();
-            }
+            if (ctx.state === 'suspended') ctx.resume();
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
             osc.connect(gain);
@@ -317,35 +297,25 @@
             gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
             osc.start(ctx.currentTime);
             osc.stop(ctx.currentTime + 0.08);
-        } catch(e) {
-            // Без звука, если не получилось
-        }
+        } catch(e) {}
     }
 
     function getDefaultData() {
-        return {
-            back: 0,
-            abs: 0,
-            meds: 0,
-            study: 0,
-            totalXP: 0,
-            lastActiveDate: null,
-            streak: 0
-        };
+        return { back: 0, abs: 0, meds: 0, study: 0, totalXP: 0, lastActiveDate: null, streak: 0 };
     }
 
     function loadLocalData() {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-            try {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
                 const parsed = JSON.parse(raw);
                 const def = getDefaultData();
                 for (let key of Object.keys(def)) {
                     if (!(key in parsed)) parsed[key] = def[key];
                 }
                 return parsed;
-            } catch(e) {}
-        }
+            }
+        } catch(e) {}
         return getDefaultData();
     }
 
@@ -357,10 +327,6 @@
         return localStorage.getItem(TOKEN_STORAGE_KEY);
     }
 
-    function saveTokenToStorage(token) {
-        localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    }
-
     function toggleTokenInput() {
         const area = document.getElementById('token-input-area');
         area.style.display = area.style.display === 'flex' ? 'none' : 'flex';
@@ -370,10 +336,10 @@
         const input = document.getElementById('token-input');
         const token = input.value.trim();
         if (!token || !token.startsWith('ghp_')) {
-            alert('Токен должен начинаться с ghp_. Проверь, что скопировал полностью.');
+            alert('Токен должен начинаться с ghp_');
             return;
         }
-        saveTokenToStorage(token);
+        localStorage.setItem(TOKEN_STORAGE_KEY, token);
         document.getElementById('token-input-area').style.display = 'none';
         input.value = '';
         GIST_ID = null;
@@ -382,7 +348,6 @@
         updateUI();
     }
 
-    // ========== GIST API ==========
     async function apiCall(url, options = {}) {
         const token = getToken();
         if (!token) throw new Error('No token');
@@ -394,19 +359,14 @@
                 ...(options.headers || {})
             }
         });
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
+        if (!response.ok) throw new Error('HTTP ' + response.status);
         return response.json();
     }
 
     async function loadGistId() {
         const gists = await apiCall('https://api.github.com/gists?per_page=100');
         for (let gist of gists) {
-            if (gist.description === GIST_DESCRIPTION && gist.files[GIST_FILENAME]) {
-                return gist.id;
-            }
+            if (gist.description === GIST_DESCRIPTION && gist.files[GIST_FILENAME]) return gist.id;
         }
         return null;
     }
@@ -417,11 +377,7 @@
             body: JSON.stringify({
                 description: GIST_DESCRIPTION,
                 public: false,
-                files: {
-                    [GIST_FILENAME]: {
-                        content: JSON.stringify(data, null, 2)
-                    }
-                }
+                files: { [GIST_FILENAME]: { content: JSON.stringify(data, null, 2) } }
             })
         });
         return gist.id;
@@ -435,7 +391,6 @@
             setStatus('💾 Локально (нажми для синхронизации)');
             return;
         }
-
         try {
             if (!GIST_ID) {
                 GIST_ID = await loadGistId();
@@ -448,11 +403,8 @@
                     setStatus('☁️ Облако подключено');
                 }
             }
-
             const gist = await apiCall(`https://api.github.com/gists/${GIST_ID}`);
-            const content = gist.files[GIST_FILENAME].content;
-            const cloudData = JSON.parse(content);
-
+            const cloudData = JSON.parse(gist.files[GIST_FILENAME].content);
             const localData = loadLocalData();
             if ((cloudData.totalXP || 0) >= (localData.totalXP || 0)) {
                 data = cloudData;
@@ -460,12 +412,11 @@
                 data = localData;
                 await saveToCloud();
             }
-
             syncEnabled = true;
             setStatus('☁️ Синхронизировано');
             saveLocalData();
         } catch (error) {
-            console.error('Ошибка синхронизации:', error);
+            console.error(error);
             syncEnabled = false;
             data = loadLocalData();
             setStatus('⚠️ Офлайн (локальные данные)');
@@ -477,17 +428,10 @@
         try {
             await apiCall(`https://api.github.com/gists/${GIST_ID}`, {
                 method: 'PATCH',
-                body: JSON.stringify({
-                    files: {
-                        [GIST_FILENAME]: {
-                            content: JSON.stringify(data, null, 2)
-                        }
-                    }
-                })
+                body: JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(data, null, 2) } } })
             });
             setStatus('☁️ Сохранено');
         } catch (error) {
-            console.error('Ошибка сохранения в облако:', error);
             setStatus('⚠️ Не сохранено в облако');
         }
     }
@@ -497,7 +441,6 @@
         if (el) el.textContent = text;
     }
 
-    // ========== STREAK ==========
     function updateStreak() {
         const today = new Date().toISOString().split('T')[0];
         if (data.lastActiveDate === today) return;
@@ -510,7 +453,6 @@
         data.lastActiveDate = today;
     }
 
-    // ========== XP & PET ==========
     function addXP(amount) {
         data.totalXP = (data.totalXP || 0) + amount;
     }
@@ -527,8 +469,10 @@
 
     function updatePet() {
         const stage = getPetStage();
-        document.getElementById('pet-emoji').textContent = stage.emoji;
-        document.getElementById('pet-stage').textContent = stage.name + ' • ' + (data.totalXP || 0) + ' XP';
+        const petEl = document.getElementById('pet-emoji');
+        const stageEl = document.getElementById('pet-stage');
+        if (petEl) petEl.textContent = stage.emoji;
+        if (stageEl) stageEl.textContent = stage.name + ' • ' + (data.totalXP || 0) + ' XP';
     }
 
     function petClick() {
@@ -542,13 +486,14 @@
             'Дракон': 'РАУР! Ты легенда!'
         };
         const bubble = document.getElementById('pet-bubble');
-        bubble.textContent = bubbles[stage.name] || 'Привет!';
-        bubble.style.opacity = '1';
-        setTimeout(() => { bubble.style.opacity = '0'; }, 2000);
+        if (bubble) {
+            bubble.textContent = bubbles[stage.name] || 'Привет!';
+            bubble.style.opacity = '1';
+            setTimeout(function() { bubble.style.opacity = '0'; }, 2000);
+        }
         playClick();
     }
 
-    // ========== ADD POINTS ==========
     async function addPoints(category, amount) {
         if (amount <= 0 || isNaN(amount)) return;
         data[category] = (data[category] || 0) + amount;
@@ -590,27 +535,16 @@
         document.getElementById('abs-points').textContent = data.abs || 0;
         document.getElementById('meds-points').textContent = data.meds || 0;
         document.getElementById('study-points').textContent = data.study || 0;
-        const total = (data.back || 0) + (data.abs || 0) + (data.meds || 0) + (data.study || 0);
+        var total = (data.back || 0) + (data.abs || 0) + (data.meds || 0) + (data.study || 0);
         document.getElementById('total-points').textContent = total;
         document.getElementById('streak-display').textContent = '🔥 Дней подряд: ' + (data.streak || 0);
         updatePet();
     }
 
-    // ========== INIT ==========
-    async function init() {
-        // Разблокируем аудио при первом касании (для iOS)
-        document.addEventListener('touchstart', function() {
-            try {
-                const ctx = getAudioCtx();
-                if (ctx.state === 'suspended') ctx.resume();
-            } catch(e) {}
-        }, { once: true });
-
-        await loadFromCloud();
-        updateUI();
-    }
-
-    init();
+    // Запуск
+    data = loadLocalData();
+    loadFromCloud().then(function() { updateUI(); });
+    updateUI();
 </script>
 </body>
 </html>
