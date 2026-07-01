@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Жизнь-игра">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
     <title>⚡ Жизнь-игра</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -266,8 +270,18 @@
 </div>
 
 <script>
+    // ========== SERVICE WORKER (для офлайн-режима и иконки на iOS) ==========
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register("data:application/javascript," + encodeURIComponent(
+            "self.addEventListener('fetch', function(e) { e.respondWith(fetch(e.request).catch(function() { return caches.match(e.request); })); });" +
+            "self.addEventListener('install', function(e) { self.skipWaiting(); });"
+        )).catch(function(err) {
+            console.log('SW register error (normal on iOS if no HTTPS scope):', err);
+        });
+    }
+
     // ========== ДАННЫЕ ==========
-    const STORAGE_KEY = 'lifeGameDataV4';
+    const STORAGE_KEY = 'lifeGameDataV5';
     const TOKEN_STORAGE_KEY = 'lifeGameGistToken';
     const GIST_FILENAME = 'life-game-data.json';
     const GIST_DESCRIPTION = 'Life Game sync data';
@@ -277,24 +291,35 @@
     let syncEnabled = false;
 
     // ========== ЗВУК ==========
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let audioCtx = null;
+
+    function getAudioCtx() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return audioCtx;
+    }
 
     function playClick() {
-        // Разблокируем AudioContext (на iOS нужно после взаимодействия пользователя)
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
+        try {
+            const ctx = getAudioCtx();
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.08);
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.08);
+        } catch(e) {
+            // Без звука, если не получилось
         }
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.08);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
-        osc.start(audioCtx.currentTime);
-        osc.stop(audioCtx.currentTime + 0.08);
     }
 
     function getDefaultData() {
@@ -573,6 +598,14 @@
 
     // ========== INIT ==========
     async function init() {
+        // Разблокируем аудио при первом касании (для iOS)
+        document.addEventListener('touchstart', function() {
+            try {
+                const ctx = getAudioCtx();
+                if (ctx.state === 'suspended') ctx.resume();
+            } catch(e) {}
+        }, { once: true });
+
         await loadFromCloud();
         updateUI();
     }
