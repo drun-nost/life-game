@@ -86,6 +86,35 @@
             cursor: pointer;
             font-size: 12px;
         }
+
+        /* Ползунок громкости */
+        .volume-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin: 8px 0;
+            font-size: 13px;
+            color: #a0a0b0;
+        }
+        .volume-control input[type="range"] {
+            -webkit-appearance: none;
+            width: 100px;
+            height: 6px;
+            border-radius: 3px;
+            background: #0f3460;
+            outline: none;
+        }
+        .volume-control input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #89b4fa;
+            cursor: pointer;
+        }
+        .volume-icon { font-size: 16px; }
+
         .stats {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -220,6 +249,13 @@
         <button onclick="saveToken()">💾 Сохранить</button>
     </div>
 
+    <!-- Ползунок громкости -->
+    <div class="volume-control">
+        <span class="volume-icon">🔈</span>
+        <input type="range" id="volume-slider" min="0" max="100" value="30" oninput="changeVolume(this.value)">
+        <span class="volume-icon">🔊</span>
+    </div>
+
     <div class="stats">
         <div class="stat-card">
             <div class="stat-name">🧘 Спина</div>
@@ -272,8 +308,9 @@
 </div>
 
 <script>
-    const STORAGE_KEY = 'lifeGameDataV11';
+    const STORAGE_KEY = 'lifeGameDataV12';
     const TOKEN_STORAGE_KEY = 'lifeGameGistToken';
+    const VOLUME_STORAGE_KEY = 'lifeGameVolume';
     const GIST_FILENAME = 'life-game-data.json';
     const GIST_DESCRIPTION = 'Life Game sync data';
 
@@ -281,14 +318,29 @@
     let GIST_ID = null;
     let syncEnabled = false;
 
-    // ========== ЗВУК ==========
+    // ========== ЗВУК С НАСТРОЙКОЙ ГРОМКОСТИ ==========
     let honorSound = null;
     let soundUnlocked = false;
+
+    function getVolume() {
+        return parseInt(localStorage.getItem(VOLUME_STORAGE_KEY) || '30');
+    }
+
+    function saveVolume(value) {
+        localStorage.setItem(VOLUME_STORAGE_KEY, value);
+    }
+
+    function changeVolume(value) {
+        saveVolume(value);
+        if (honorSound) {
+            honorSound.volume = value / 100;
+        }
+    }
 
     function initSound() {
         if (honorSound) return;
         honorSound = new Audio('honor.mp3');
-        honorSound.volume = 0.8;
+        honorSound.volume = getVolume() / 100;
         honorSound.preload = 'auto';
         honorSound.addEventListener('canplaythrough', function() {
             console.log('✅ Звук загружен');
@@ -299,11 +351,12 @@
     function unlockSound() {
         if (soundUnlocked) return;
         if (!honorSound) initSound();
+        const savedVolume = honorSound.volume;
         honorSound.volume = 0;
         honorSound.play().then(function() {
             honorSound.pause();
             honorSound.currentTime = 0;
-            honorSound.volume = 0.8;
+            honorSound.volume = savedVolume;
             soundUnlocked = true;
             console.log('🔓 Звук разблокирован');
         }).catch(function(e) {});
@@ -360,7 +413,6 @@
         input.value = '';
         GIST_ID = null;
         syncEnabled = false;
-        // Сразу пробуем подключиться
         setStatus('🔄 Подключение...');
         await loadFromCloud();
         updateUI();
@@ -413,20 +465,13 @@
             if (!GIST_ID) {
                 GIST_ID = await loadGistId();
                 if (!GIST_ID) {
-                    // Нет гиста — создаём с текущими данными
                     GIST_ID = await createGist();
                     setStatus('☁️ Облако подключено');
                 }
             }
-
             const gist = await apiCall(`https://api.github.com/gists/${GIST_ID}`);
             const cloudData = JSON.parse(gist.files[GIST_FILENAME].content);
-            const localData = loadLocalData();
-
-            // ВСЕГДА берём облачные данные при загрузке страницы
-            // Это гарантирует синхронизацию в обе стороны
             data = cloudData;
-
             syncEnabled = true;
             setStatus('☁️ Синхронизировано');
             saveLocalData();
@@ -446,7 +491,6 @@
                 body: JSON.stringify({ files: { [GIST_FILENAME]: { content: JSON.stringify(data, null, 2) } } })
             });
             setStatus('☁️ Сохранено');
-            console.log('✅ Сохранено в облако');
         } catch (error) {
             console.error('Ошибка сохранения:', error);
             setStatus('⚠️ Не сохранено в облако');
@@ -517,7 +561,6 @@
         addXP(amount);
         updateStreak();
         saveLocalData();
-        // Сразу сохраняем в облако и ждём
         await saveToCloud();
         playRDR2Sound();
         updateUI();
@@ -560,12 +603,15 @@
     }
 
     // ========== ИНИЦИАЛИЗАЦИЯ ==========
+    // Устанавливаем ползунок в сохранённое положение
+    const savedVolume = getVolume();
+    document.getElementById('volume-slider').value = savedVolume;
+
     initSound();
     document.addEventListener('touchstart', unlockSound, { once: true });
     document.addEventListener('click', unlockSound, { once: true });
 
     data = loadLocalData();
-    // При загрузке ВСЕГДА берём данные из облака (если есть токен)
     loadFromCloud().then(function() { updateUI(); });
     updateUI();
 </script>
