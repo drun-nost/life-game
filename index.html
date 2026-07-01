@@ -265,7 +265,7 @@
 </div>
 
 <script>
-    const STORAGE_KEY = 'lifeGameDataV6';
+    const STORAGE_KEY = 'lifeGameDataV10';
     const TOKEN_STORAGE_KEY = 'lifeGameGistToken';
     const GIST_FILENAME = 'life-game-data.json';
     const GIST_DESCRIPTION = 'Life Game sync data';
@@ -273,31 +273,65 @@
     let data;
     let GIST_ID = null;
     let syncEnabled = false;
-    let audioCtx = null;
 
-    function getAudioCtx() {
-        if (!audioCtx) {
-            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-        return audioCtx;
+    // ========== ЗВУК ИЗ ФАЙЛА (исправленная версия) ==========
+    // Загружаем звук один раз и храним
+    let honorSound = null;
+    let soundLoaded = false;
+    let soundUnlocked = false;
+
+    function initSound() {
+        if (honorSound) return;
+        honorSound = new Audio('honor.mp3');
+        honorSound.volume = 0.8;
+        honorSound.preload = 'auto';
+
+        // Когда звук загрузился
+        honorSound.addEventListener('canplaythrough', function() {
+            soundLoaded = true;
+            console.log('✅ Звук загружен и готов');
+        });
+
+        honorSound.addEventListener('error', function(e) {
+            console.error('❌ Ошибка загрузки звука:', e);
+        });
+
+        // Загружаем
+        honorSound.load();
     }
 
-    function playClick() {
-        try {
-            const ctx = getAudioCtx();
-            if (ctx.state === 'suspended') ctx.resume();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(800, ctx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.08);
-            gain.gain.setValueAtTime(0.3, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
-            osc.start(ctx.currentTime);
-            osc.stop(ctx.currentTime + 0.08);
-        } catch(e) {}
+    // Разблокировка звука — нужно вызвать при первом взаимодействии
+    function unlockSound() {
+        if (soundUnlocked) return;
+        if (!honorSound) initSound();
+
+        // Воспроизводим без звука для разблокировки
+        honorSound.volume = 0;
+        honorSound.play().then(function() {
+            honorSound.pause();
+            honorSound.currentTime = 0;
+            honorSound.volume = 0.8;
+            soundUnlocked = true;
+            console.log('🔓 Звук разблокирован');
+        }).catch(function(e) {
+            console.log('⚠️ Не удалось разблокировать звук:', e);
+        });
+    }
+
+    function playRDR2Sound() {
+        if (!honorSound) initSound();
+        if (!honorSound) return;
+
+        // Сбрасываем и играем
+        honorSound.currentTime = 0;
+        honorSound.play().then(function() {
+            console.log('▶️ Звук воспроизведён');
+        }).catch(function(e) {
+            console.log('⚠️ Звук не воспроизвёлся:', e.message);
+            // Пробуем разблокировать
+            soundUnlocked = false;
+            unlockSound();
+        });
     }
 
     function getDefaultData() {
@@ -416,7 +450,6 @@
             setStatus('☁️ Синхронизировано');
             saveLocalData();
         } catch (error) {
-            console.error(error);
             syncEnabled = false;
             data = loadLocalData();
             setStatus('⚠️ Офлайн (локальные данные)');
@@ -491,7 +524,7 @@
             bubble.style.opacity = '1';
             setTimeout(function() { bubble.style.opacity = '0'; }, 2000);
         }
-        playClick();
+        playRDR2Sound();
     }
 
     async function addPoints(category, amount) {
@@ -501,7 +534,7 @@
         updateStreak();
         saveLocalData();
         await saveToCloud();
-        playClick();
+        playRDR2Sound();
         updateUI();
     }
 
@@ -541,7 +574,15 @@
         updatePet();
     }
 
-    // Запуск
+    // ========== ИНИЦИАЛИЗАЦИЯ ==========
+    // Загружаем звук при запуске
+    initSound();
+
+    // Разблокируем звук при ЛЮБОМ первом касании или клике
+    document.addEventListener('touchstart', unlockSound, { once: true });
+    document.addEventListener('click', unlockSound, { once: true });
+
+    // Загружаем данные
     data = loadLocalData();
     loadFromCloud().then(function() { updateUI(); });
     updateUI();
